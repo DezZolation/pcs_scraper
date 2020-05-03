@@ -117,14 +117,16 @@ class RacespiderSpider(scrapy.Spider):
         editions = response.xpath("//div[@class='ESNav editions']//option")
         for edition in editions:
             if int(edition.xpath("text()").get()) >= self.until_year:
-                yield response.follow("https://www.procyclingstats.com/"+edition.xpath("@value").get(), callback = self.parse_edition)
+                slug = edition.xpath("@value").get()
+                if not self.is_edition_known(slug.replace("//results", "").replace("/results", "").replace("race/", "")):
+                    yield response.follow("https://www.procyclingstats.com/"+slug, callback = self.parse_edition)
 
     def parse_edition(self, response):
-        stages = response.xpath("//div[@class='ESNav stages']//option/@value")
+        stages = response.xpath("//div[@class='ESNav stages']//option")
         if len(stages) > 0:
             for stage in stages:
-                if "stage" in stage.get():
-                    slug = stage.get().replace("race/", "").replace("//", "/").replace("/results", "")
+                if "stage" in stage.xpath("./text()").get():
+                    slug = stage.xpath("./@value").get().replace("race/", "").replace("//", "/").replace("/results", "")
                     if not self.is_race_known(slug):
                         yield response.follow("https://www.procyclingstats.com/race/"+slug, callback = self.parse_race)
         else:
@@ -261,6 +263,14 @@ class RacespiderSpider(scrapy.Spider):
 
     def is_race_known(self, slug):
         self.cursor.execute("""SELECT * FROM results WHERE race=?""", (slug,))
+        result = self.cursor.fetchone()
+        if result:
+            return True
+        else:
+            return False
+
+    def is_edition_known(self, slug):
+        self.cursor.execute("""SELECT * FROM results WHERE race LIKE ?""", (slug+'%',))
         result = self.cursor.fetchone()
         if result:
             return True
